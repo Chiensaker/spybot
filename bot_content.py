@@ -23,18 +23,18 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 app = Flask(__name__)
 
 # --- CẤU HÌNH SPY ---
-KEYWORDS = [# --- Địa danh & Từ khóa chung ---
-    "nha trang", "khánh hòa", "cam ranh", "diên khánh", "vân phong", 
-    "cao tốc", "quy hoạch", "sân bay", "cảng biển", "caraworld", "la tiên", "paramount",
-
-    # --- Cá Mập & Dự án lớn ---
-    "vingroup", "vinpearl", "vinhomes",
-    "kdi", "vega city",               # KDI Holdings (Dự án Vega City)
-    "kn holdings", "kn paradise",     # KN Holdings (Dự án KN Paradise)
-    "sungroup", "sun group",          # Sun Group
-    "crystal bay",                    # Crystal Bay (Cũng rất mạnh ở Nha Trang)
-    "hưng thịnh",                     # Hưng Thịnh (Nhiều dự án ở Bắc Bán Đảo)
-    "novaland"]
+KEYWORDS = [
+    # 1. Địa danh (Bắt buộc phải có để định vị thị trường)
+    "nha trang", "khánh hòa", "cam ranh", "diên khánh", 
+    "vân phong", "cam lâm", "bãi dài", "ninh hòa",
+    
+    # 2. Các dự án/địa điểm đặc thù (Nhắc tên là biết ở Khánh Hòa)
+    "vega city", "kn paradise", "vinpearl nha trang", 
+    "hòn tre", "bắc bán đảo", "đầm thủy triều",
+    
+    # 3. Các từ khóa hẹp đi kèm địa phương (tránh bắt nhầm)
+    "tỉnh khánh hòa", "tp nha trang"
+]
 RSS_FEEDS = [
     "https://vnexpress.net/rss/kinh-doanh/bat-dong-san.rss",
     "https://cafef.vn/bat-dong-san.rss",
@@ -49,30 +49,70 @@ def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# --- RADAR SĂN TIN ---
+# ==========================================
+# PHẦN 1: CHỨC NĂNG SPY (SĂN TIN) - ĐÃ NÂNG CẤP
+# ==========================================
 def check_news_updates(updater):
+    """Chạy ngầm 30 phút/lần, chỉ gửi tối đa 5 tin mỗi lần"""
     while True:
-        print("🛰️ Đang quét tin...")
-        found_new = False
+        print("🛰️ Đang quét tin tức thị trường...")
+        
+        # Danh sách chứa các tin mới tìm được trong đợt quét này
+        found_entries = []
+        
         for feed_url in RSS_FEEDS:
             try:
                 feed = feedparser.parse(feed_url)
                 for entry in feed.entries:
-                    if entry.link in seen_links: continue
+                    # 1. Kiểm tra xem tin này đã báo chưa
+                    if entry.link in seen_links:
+                        continue
                     
+                    # 2. Kiểm tra xem đã có trong danh sách chờ chưa (tránh trùng lặp giữa các báo)
+                    if any(e.link == entry.link for e in found_entries):
+                        continue
+
+                    # 3. Kiểm tra từ khóa
                     title_lower = entry.title.lower()
                     summary_lower = entry.summary.lower() if 'summary' in entry else ""
                     
                     if any(kw in title_lower or kw in summary_lower for kw in KEYWORDS):
-                        msg = f"🔥 **TIN HOT THỊ TRƯỜNG!**\n\n📰 **{entry.title}**\n\n🔗 {entry.link}\n\n👇 *Copy link hoặc tiêu đề gửi lại cho tôi để tôi viết bài phân tích ngay!*"
-                        if MY_USER_ID:
-                            updater.bot.send_message(chat_id=MY_USER_ID, text=msg, parse_mode=ParseMode.MARKDOWN)
-                        seen_links.append(entry.link)
-                        if len(seen_links) > 100: seen_links.pop(0)
-                        found_new = True
+                        found_entries.append(entry)
+                        
             except Exception as e:
-                print(f"Lỗi RSS: {e}")
-        time.sleep(1800) # 30 phút quét 1 lần
+                print(f"Lỗi đọc RSS {feed_url}: {e}")
+        
+        # --- LỌC VÀ GỬI TIN ---
+        if found_entries:
+            # Chỉ lấy tối đa 5 bài đầu tiên (Thường là mới nhất)
+            # Bạn có thể sửa số 5 thành số khác tùy ý
+            top_picks = found_entries[:5]
+            
+            print(f"Tìm thấy {len(found_entries)} tin, sẽ gửi {len(top_picks)} tin.")
+
+            for entry in top_picks:
+                msg = f"🔥 **TIN HOT THỊ TRƯỜNG!**\n\n📰 **{entry.title}**\n\n🔗 {entry.link}\n\n👇 *Copy tiêu đề gửi lại cho tôi để phân tích!*"
+                
+                # Gửi cho Sếp
+                if MY_USER_ID:
+                    try:
+                        updater.bot.send_message(chat_id=MY_USER_ID, text=msg, parse_mode=ParseMode.MARKDOWN)
+                        # Chỉ khi gửi thành công mới đánh dấu là đã xem
+                        seen_links.append(entry.link)
+                    except Exception as e:
+                        print(f"Lỗi gửi tin spy: {e}")
+                
+                # Nghỉ 2 giây giữa các tin để tránh bị Telegram chặn spam
+                time.sleep(2)
+
+            # Xóa bớt bộ nhớ đệm nếu quá đầy
+            if len(seen_links) > 200: 
+                del seen_links[:50]
+        else:
+            print("Không có tin mới phù hợp.")
+            
+        # Ngủ 30 phút (1800 giây) rồi quét tiếp
+        time.sleep(1800)
 
 # --- HỌA SĨ VẼ ẢNH (STYLE DILAND) ---
 def draw_wrapped_text(draw, text, font, text_color, x, y, max_width, line_spacing=10):
@@ -201,3 +241,4 @@ if __name__ == '__main__':
     updater.start_polling()
 
     updater.idle()
+
