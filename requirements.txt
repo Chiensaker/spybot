@@ -4,3 +4,4 @@ flask
 google-generativeai
 Pillow
 feedparser
+beautifulsoup4
