@@ -23,7 +23,18 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 app = Flask(__name__)
 
 # --- CẤU HÌNH SPY ---
-KEYWORDS = ["nha trang", "khánh hòa", "cam ranh", "diên khánh", "vân phong", "cao tốc", "đất nền", "vingroup"]
+KEYWORDS = [# --- Địa danh & Từ khóa chung ---
+    "nha trang", "khánh hòa", "cam ranh", "diên khánh", "vân phong", 
+    "cao tốc", "quy hoạch", "sân bay", "cảng biển", "caraworld", "la tiên", "paramount",
+
+    # --- Cá Mập & Dự án lớn ---
+    "vingroup", "vinpearl", "vinhomes",
+    "kdi", "vega city",               # KDI Holdings (Dự án Vega City)
+    "kn holdings", "kn paradise",     # KN Holdings (Dự án KN Paradise)
+    "sungroup", "sun group",          # Sun Group
+    "crystal bay",                    # Crystal Bay (Cũng rất mạnh ở Nha Trang)
+    "hưng thịnh",                     # Hưng Thịnh (Nhiều dự án ở Bắc Bán Đảo)
+    "novaland"]
 RSS_FEEDS = [
     "https://vnexpress.net/rss/kinh-doanh/bat-dong-san.rss",
     "https://cafef.vn/bat-dong-san.rss",
@@ -188,4 +199,5 @@ if __name__ == '__main__':
     
     print("Bot Content Ready...")
     updater.start_polling()
+
     updater.idle()
